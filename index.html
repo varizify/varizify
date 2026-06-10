@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>مدیریت صندوق رانندگان | سامانه اعتبار بر اساس مشارکت</title>
+    <!-- PapaParse برای خواندن CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            font-family: 'Segoe UI', 'Tahoma', 'IranSans', system-ui, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* هدر و کارت‌ها */
+        .card {
+            background: rgba(255,255,255,0.95);
+            border-radius: 28px;
+            box-shadow: 0 20px 35px -10px rgba(0,0,0,0.3);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(2px);
+            transition: all 0.2s;
+        }
+
+        h1 {
+            font-size: 1.9rem;
+            background: linear-gradient(120deg, #f6d365, #fda085);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            display: inline-block;
+            margin-bottom: 0.5rem;
+        }
+
+        .sub {
+            color: #e0e0e0;
+            margin-bottom: 1rem;
+            border-right: 4px solid #f39c12;
+            padding-right: 12px;
+        }
+
+        .upload-area {
+            border: 2px dashed #2c3e50;
+            border-radius: 24px;
+            background: #f8f9fc;
+            padding: 1.2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .upload-area:hover {
+            background: #eef2f7;
+            border-color: #e67e22;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .btn {
+            background: #2c3e50;
+            color: white;
+            padding: 8px 24px;
+            border: none;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            margin: 5px;
+        }
+        .btn-primary {
+            background: #e67e22;
+            box-shadow: 0 4px 8px rgba(230,126,34,0.3);
+        }
+        .btn-primary:hover {
+            background: #d35400;
+            transform: scale(1.02);
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #2c3e50;
+            color: #2c3e50;
+        }
+        .btn-outline:hover {
+            background: #2c3e50;
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 12px 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #2c3e50;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover {
+            background-color: #fef5e7;
+        }
+        .badge {
+            background: #27ae60;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+        .badge-warning {
+            background: #e67e22;
+        }
+        .badge-danger {
+            background: #c0392b;
+        }
+
+        .search-box {
+            padding: 8px 15px;
+            border-radius: 30px;
+            border: 1px solid #ccc;
+            width: 100%;
+            max-width: 300px;
+            margin-bottom: 15px;
+        }
+
+        .footer-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+            margin-top: 20px;
+            background: #ecf0f1;
+            border-radius: 20px;
+            padding: 15px;
+        }
+
+        @media (max-width: 700px) {
+            th, td { font-size: 0.75rem; padding: 8px 4px; }
+            .card { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(10px);">
+        <h1>🚖 صندوق همیار رانندگان استیجاری</h1>
+        <div class="sub">اعتبار = (مجموع مشارکت) × (ضریب مشارکت) | هرکس بیشتر واریز کند، وام بیشتری می‌گیرد</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: space-between; align-items: center;">
+            <div class="upload-area" id="uploadArea">
+                📂 کلیک یا فایل CSV را اینجا رها کنید
+                <input type="file" id="csvFile" accept=".csv">
+                <p style="font-size: 12px; margin-top: 10px;">فرمت: نام, مبلغ(تومان), تاریخ (دلخواه)</p>
+            </div>
+            <div>
+                <button class="btn btn-outline" id="sampleBtn">📥 دانلود نمونه CSV</button>
+                <button class="btn btn-primary" id="refreshDemoBtn">🔄 بارگذاری دمو</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- خلاصه و جدول اعتبارات -->
+    <div class="card">
+        <h3>🏆 رتبه‌بندی اعضای صندوق | اعتبار قابل دریافت (حداکثر وام)</h3>
+        <input type="text" id="searchMember" class="search-box" placeholder="جستجوی نام عضو ...">
+        <div style="overflow-x: auto;">
+            <table id="creditTable">
+                <thead>
+                    <tr><th>رتبه</th><th>نام عضو</th><th>مجموع مشارکت (تومان)</th><th>ضریب اعتبار</th><th>💰 اعتبار قابل دریافت (وام)</th></tr>
+                </thead>
+                <tbody id="creditTbody">
+                    <tr><td colspan="5">لطفاً فایل CSV را آپلود کنید یا روی دمو کلیک کنید</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="footer-stats" id="statsPanel"></div>
+    </div>
+
+    <!-- لیست همه واریزها -->
+    <div class="card">
+        <h3>📋 گزارش واریزهای اعضا (جزئیات)</h3>
+        <div style="overflow-x: auto;">
+            <table id="transactionsTable">
+                <thead><tr><th>نام</th><th>مبلغ (تومان)</th><th>تاریخ ثبت</th></tr></thead>
+                <tbody id="transTbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // تعریف ضرایب بر اساس مجموع مشارکت (به تومان)
+    function getCoefficient(total) {
+        if (total < 5_000_000) return 0;          // کمتر از 5 میلیون → اعتبار صفر
+        if (total < 20_000_000) return 2;         // 5 تا 20 میلیون → 2 برابر
+        if (total < 50_000_000) return 4;         // 20 تا 50 میلیون → 4 برابر
+        return 6;                                 // بالای 50 میلیون → 6 برابر
+    }
+
+    // تبدیل عدد به تومان با کاما
+    function toToman(num) {
+        return num.toLocaleString('fa-IR') + " تومان";
+    }
+
+    // پردازش داده‌های CSV
+    function processData(records) {
+        // records: آرایه ای از اشیاء با کلیدهای نام, مبلغ, تاریخ (بر اساس هدر)
+        // ساخت نقشه مجموع به ازای هر شخص
+        let memberMap = new Map(); // نام -> { total, transactions: [] }
+        
+        for (let row of records) {
+            let name = row['نام']?.trim();
+            let amountRaw = row['مبلغ'] || row['مبلغ(تومان)'] || row['مبلغ (تومان)'] || '0';
+            let amount = parseFloat(amountRaw.toString().replace(/,/g, '').trim());
+            if (isNaN(amount)) amount = 0;
+            let date = row['تاریخ'] || '----';
+            
+            if (!name || name === "") continue;
+            
+            if (!memberMap.has(name)) {
+                memberMap.set(name, { total: 0, transactions: [] });
+            }
+            let member = memberMap.get(name);
+            member.total += amount;
+            member.transactions.push({ amount, date, name });
+        }
+        
+        // ساخت آرایه نهایی اعضا
+        let members = [];
+        for (let [name, data] of memberMap.entries()) {
+            let coeff = getCoefficient(data.total);
+            let credit = data.total * coeff;
+            members.push({
+                name: name,
+                total: data.total,
+                coefficient: coeff,
+                credit: credit,
+                transactions: data.transactions
+            });
+        }
+        // مرتب‌سازی بر اساس اعتبار نزولی
+        members.sort((a,b) => b.credit - a.credit);
+        
+        // لیست همه تراکنش‌ها (برای نمایش جزئیات)
+        let allTransactions = [];
+        for (let m of members) {
+            allTransactions.push(...m.transactions);
+        }
+        // مرتب‌سازی تراکنش‌ها بر اساس مبلغ یا تاریخ (اختیاری)
+        allTransactions.sort((a,b) => b.amount - a.amount);
+        
+        return { members, allTransactions };
+    }
+    
+    // نمایش جدول اعتبارات و جزئیات
+    function renderDashboard(members, allTransactions) {
+        const tbody = document.getElementById('creditTbody');
+        const statsDiv = document.getElementById('statsPanel');
+        const transTbody = document.getElementById('transTbody');
+        
+        if (!members.length) {
+            tbody.innerHTML = '<tr><td colspan="5">هیچ داده‌ای یافت نشد</td></tr>';
+            statsDiv.innerHTML = '';
+            transTbody.innerHTML = '<tr><td colspan="3">-</td></tr>';
+            return;
+        }
+        
+        // فیلتر جستجو
+        const searchTerm = document.getElementById('searchMember').value.trim().toLowerCase();
+        let filteredMembers = members;
+        if (searchTerm) {
+            filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchTerm));
+        }
+        
+        // رندر جدول اعضا
+        let htmlRows = '';
+        filteredMembers.forEach((m, idx) => {
+            let rank = idx + 1;
+            let badgeClass = (m.coefficient >= 4) ? 'badge' : (m.coefficient === 0 ? 'badge-danger' : 'badge-warning');
+            htmlRows += `<tr>
+                <td>${rank}</td>
+                <td><strong>${m.name}</strong></td>
+                <td>${toToman(m.total)}</td>
+                <td><span class="${badgeClass}" style="padding:4px 12px;">${m.coefficient}</span></td>
+                <td style="color:#27ae60; font-weight:bold;">${toToman(m.credit)}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = htmlRows;
+        
+        // آمار کلی
+        let totalFund = members.reduce((sum, m) => sum + m.total, 0);
+        let activeMembers = members.filter(m => m.total >= 5_000_000).length;
+        let totalCreditPotential = members.reduce((sum, m) => sum + m.credit, 0);
+        statsDiv.innerHTML = `
+            <div>💰 مجموع منابع صندوق: ${toToman(totalFund)}</div>
+            <div>👥 اعضای فعال (مجموع ≥۵ میلیون): ${activeMembers} نفر</div>
+            <div>🏦 کل اعتبار قابل تخصیص: ${toToman(totalCreditPotential)}</div>
+            <div>⭐ بالاترین ضریب: ${members[0]?.coefficient || 0} (${members[0]?.name || '-'})</div>
+        `;
+        
+        // رندر تراکنش‌ها
+        let transHtml = '';
+        allTransactions.slice(0, 200).forEach(t => {
+            transHtml += `<tr><td>${t.name}</td><td>${toToman(t.amount)}</td><td>${t.date}</td></tr>`;
+        });
+        if (allTransactions.length === 0) transHtml = '<tr><td colspan="3">تراکنشی موجود نیست</td></tr>';
+        transTbody.innerHTML = transHtml;
+    }
+    
+    // خواندن فایل CSV و پردازش
+    function loadCSV(file) {
+        Papa.parse(file, {
+            header: true,
+            encoding: "UTF-8",
+            skipEmptyLines: true,
+            complete: function(results) {
+                if (results.errors.length) {
+                    console.warn(results.errors);
+                    alert("خطا در خواندن CSV: " + results.errors[0]?.message);
+                }
+                const records = results.data;
+                if (!records || records.length === 0) {
+                    alert("فایل خالی یا فرمت نامناسب است. ستون‌های مورد نیاز: نام, مبلغ, تاریخ");
+                    return;
+                }
+                // بررسی وجود ستون نام و مبلغ
+                const firstRow = records[0];
+                if (!firstRow.hasOwnProperty('نام') || (!firstRow.hasOwnProperty('مبلغ') && !firstRow.hasOwnProperty('مبلغ(تومان)'))) {
+                    alert("ستون‌های مورد نیاز یافت نشد.\nلطفاً از ستون‌های «نام» و «مبلغ» استفاده کنید.");
+                    return;
+                }
+                const { members, allTransactions } = processData(records);
+                // ذخیره در sessionStorage برای نمایش آسان (اختیاری)
+                sessionStorage.setItem('membersData', JSON.stringify(members));
+                sessionStorage.setItem('transData', JSON.stringify(allTransactions));
+                renderDashboard(members, allTransactions);
+            },
+            error: function(err) {
+                alert("خطا در پردازش فایل: " + err.message);
+            }
+        });
+    }
+    
+    // داده‌های دمو (نمونه واقعی از رانندگان)
+    function loadDemoData() {
+        const demoCSV = `نام,مبلغ,تاریخ
+علی رضایی,15000000,1403/01/10
+سعید کریمی,22000000,1403/01/12
+مهدی احمدی,52000000,1403/01/05
+رضا محمدی,4800000,1403/01/18
+حسن نوری,8000000,1403/01/20
+علی رضایی,5000000,1403/02/01
+سعید کریمی,30000000,1403/02/15
+پیمان جعفری,75000000,1403/01/25
+کریم حسنی,19000000,1403/01/30`;
+        Papa.parse(demoCSV, {
+            header: true,
+            complete: function(results) {
+                const { members, allTransactions } = processData(results.data);
+                renderDashboard(members, allTransactions);
+            }
+        });
+    }
+    
+    // دانلود نمونه فایل CSV
+    function downloadSample() {
+        const sample = `نام,مبلغ (تومان),تاریخ
+علیرضا محمودی,12000000,1403/02/01
+سپهر حسینی,25000000,1403/02/05
+نادر حبیبی,6000000,1403/02/10
+سعید کریمی,45000000,1403/02/12
+علیرضا محمودی,8000000,1403/02/20`;
+        const blob = new Blob([sample], {type: "text/csv;charset=utf-8;"});
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.setAttribute("download", "sample_ranandeh.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+    
+    // اتصال رویدادها
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            loadCSV(e.target.files[0]);
+        }
+    });
+    document.getElementById('uploadArea').addEventListener('click', function() {
+        document.getElementById('csvFile').click();
+    });
+    document.getElementById('sampleBtn').addEventListener('click', downloadSample);
+    document.getElementById('refreshDemoBtn').addEventListener('click', loadDemoData);
+    document.getElementById('searchMember').addEventListener('keyup', function() {
+        const storedMembers = sessionStorage.getItem('membersData');
+        if (storedMembers) {
+            const members = JSON.parse(storedMembers);
+            const trans = JSON.parse(sessionStorage.getItem('transData') || '[]');
+            renderDashboard(members, trans);
+        } else {
+            loadDemoData();
+        }
+    });
+    
+    // بارگذاری پیش‌فرض دمو هنگام باز شدن صفحه
+    window.addEventListener('load', () => {
+        loadDemoData();
+        // drag & drop ساده
+        const dropZone = document.getElementById('uploadArea');
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.background = "#e9ecef"; });
+        dropZone.addEventListener('dragleave', () => { dropZone.style.background = "#f8f9fc"; });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.background = "#f8f9fc";
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.csv')) loadCSV(file);
+            else alert("لطفاً فایل CSV آپلود کنید");
+        });
+    });
+</script>
+</body>
+</html>
